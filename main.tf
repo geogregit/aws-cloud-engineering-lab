@@ -111,6 +111,7 @@ data "aws_ami" "amazon_linux" {
 }
 
 resource "aws_instance" "web_server" {
+  count                  = 0
   ami                    = data.aws_ami.amazon_linux.id
   instance_type          = "t3.micro"
   subnet_id              = aws_subnet.public_subnet_1.id
@@ -120,4 +121,24 @@ resource "aws_instance" "web_server" {
     Name    = "cloud-lab-web-server"
     Project = "AWS-Cloud-Engineering-Lab"
   }
+}
+
+resource "aws_cloudwatch_dashboard" "cloud_lab_dashboard" {
+  dashboard_name = "AWS-Cloud-Engineering-Lab"
+
+  dashboard_body = jsonencode({
+    widgets = [
+      {
+        type   = "text"
+        x      = 0
+        y      = 0
+        width  = 24
+        height = 3
+
+        properties = {
+          markdown = "# AWS Cloud Engineering Lab\nInfrastructure monitoring dashboard managed with Terraform.\n\n**Region:** us-east-2"
+        }
+      }
+    ]
+  })
 }

@@ -142,3 +142,116 @@ resource "aws_cloudwatch_dashboard" "cloud_lab_dashboard" {
     ]
   })
 }
+
+resource "aws_launch_template" "web_template" {
+  name_prefix   = "cloud-lab-web-"
+  image_id      = data.aws_ami.amazon_linux.id
+  instance_type = "t3.micro"
+
+  vpc_security_group_ids = [aws_security_group.web_sg.id]
+
+  user_data = base64encode(<<-EOT
+    #!/bin/bash
+    dnf install -y httpd
+    systemctl enable httpd
+    systemctl start httpd
+    echo "<h1>AWS Cloud Engineering Lab</h1>" > /var/www/html/index.html
+  EOT
+  )
+
+  tag_specifications {
+    resource_type = "instance"
+
+    tags = {
+      Name    = "cloud-lab-auto-scaled-web-server"
+      Project = "AWS-Cloud-Engineering-Lab"
+    }
+  }
+
+  tags = {
+    Name    = "cloud-lab-web-launch-template"
+    Project = "AWS-Cloud-Engineering-Lab"
+  }
+}
+
+resource "aws_autoscaling_group" "web_asg" {
+  name             = "cloud-lab-web-asg"
+  desired_capacity = 2
+  min_size         = 2
+  max_size         = 4
+  vpc_zone_identifier = [
+    aws_subnet.public_subnet_1.id,
+    aws_subnet.public_subnet_2.id
+  ]
+
+  launch_template {
+    id      = aws_launch_template.web_template.id
+    version = "$Latest"
+  }
+
+  tag {
+    key                 = "Name"
+    value               = "cloud-lab-asg-web-server"
+    propagate_at_launch = true
+  }
+
+  tag {
+    key                 = "Project"
+    value               = "AWS-Cloud-Engineering-Lab"
+    propagate_at_launch = true
+  }
+}
+
+resource "aws_lb" "web_alb" {
+  name               = "cloud-lab-web-alb"
+  internal           = false
+  load_balancer_type = "application"
+  security_groups    = [aws_security_group.web_sg.id]
+
+  subnets = [
+    aws_subnet.public_subnet_1.id,
+    aws_subnet.public_subnet_2.id
+  ]
+
+  tags = {
+    Name    = "cloud-lab-web-alb"
+    Project = "AWS-Cloud-Engineering-Lab"
+  }
+}
+
+resource "aws_lb_target_group" "web_tg" {
+  name     = "cloud-lab-web-tg"
+  port     = 80
+  protocol = "HTTP"
+  vpc_id   = aws_vpc.cloud_lab_vpc.id
+
+  health_check {
+    enabled             = true
+    path                = "/"
+    protocol            = "HTTP"
+    healthy_threshold   = 2
+    unhealthy_threshold = 2
+  }
+
+  tags = {
+    Name    = "cloud-lab-web-tg"
+    Project = "AWS-Cloud-Engineering-Lab"
+  }
+}
+
+resource "aws_lb_listener" "web_listener" {
+  load_balancer_arn = aws_lb.web_alb.arn
+  port              = 80
+  protocol          = "HTTP"
+
+  default_action {
+    type             = "forward"
+    target_group_arn = aws_lb_target_group.web_tg.arn
+  }
+}
+
+resource "aws_autoscaling_attachment" "web_asg_attachment" {
+  autoscaling_group_name = aws_autoscaling_group.web_asg.id
+  lb_target_group_arn    = aws_lb_target_group.web_tg.arn
+}
+

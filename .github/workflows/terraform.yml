@@ -1,4 +1,4 @@
-name: Terraform CI
+name: Cloud Infrastructure CI
 
 on:
   push:
@@ -9,7 +9,7 @@ on:
       - main
 
 jobs:
-  terraform:
+  validate:
     runs-on: ubuntu-latest
 
     steps:
@@ -27,3 +27,11 @@ jobs:
 
       - name: Terraform Validate
         run: terraform validate
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.x"
+
+      - name: Validate Python Syntax
+        run: python -m py_compile scripts/aws_inventory.py
